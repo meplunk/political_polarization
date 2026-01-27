@@ -66,6 +66,8 @@ EMBEDDINGS_CV_RESULTS = MODELS_DIR / "embeddings_cv_results.csv"
 TEXT_COLUMN = "speech"
 TARGET_COLUMN = "dime"
 SPEAKER_ID_COLUMN = "unique_id"
+AD_TEXT_COLUMN = "ad_text"
+AD_ID_COLUMN = "vidfile"
 
 # ============================================
 # HYPERPARAMETERS
