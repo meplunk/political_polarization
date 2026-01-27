@@ -29,13 +29,16 @@ USAGE:
 
 ===============================================================================
 """
+import os
+import re
 import pandas as pd
 from pathlib import Path
 from config import (
-    DIME_DATA, SPEECHES_FILE, SPEAKER_MAP,
-    CLEANED_SPEECHES, CLEANED_DIR,
+    DIME_DATA, SPEECHES_FILE, SPEAKER_MAP, VIDEO_DIR, WMP_METADATA,
+    CLEANED_SPEECHES, CLEANED_ADS, CLEANED_DIR,
     TEXT_COLUMN, TARGET_COLUMN, SPEAKER_ID_COLUMN,
-    MIN_SPEECH_LENGTH
+    AD_TEXT_COLUMN, AD_ID_COLUMN,
+    MIN_SPEECH_LENGTH, MIN_AD_LENGTH
 )
 
 
@@ -179,7 +182,7 @@ def merge_with_ideology_scores(df_speeches, df_dime):
     
     # Rename columns to match config
     column_mapping = {
-        'unique_id': SPEAKER_ID_COLUMN,
+        'speakerid': SPEAKER_ID_COLUMN,
         'speech': TEXT_COLUMN,
         'dwdime': TARGET_COLUMN
     }
@@ -190,7 +193,7 @@ def merge_with_ideology_scores(df_speeches, df_dime):
         SPEAKER_ID_COLUMN,
         'speech_id',
         TEXT_COLUMN,
-        'Speakerid',
+        'unique_id',
         'lastname',
         'firstname',
         'state',
@@ -220,6 +223,103 @@ def merge_with_ideology_scores(df_speeches, df_dime):
     return merged
 
 
+def load_and_clean_ads(video_dir, metadata_path, df_dime):
+    """
+    Load ad transcripts and merge with metadata and DIME scores.
+    
+    Args:
+        video_dir: Path to directory with ad transcript .txt files
+        metadata_path: Path to WMP metadata file
+        df_dime: DataFrame with DIME scores
+        
+    Returns:
+        DataFrame with ad transcripts and ideology scores
+    """
+    print("Loading ad transcripts...")
+    
+    # Collect all .txt files from video directory
+    txt_files = list(Path(video_dir).glob("*.txt"))
+    
+    if not txt_files:
+        print(f"  Warning: No .txt files found in {video_dir}")
+        return pd.DataFrame()
+    
+    print(f"  Found {len(txt_files):,} ad transcript files")
+    
+    # Read all ad transcripts
+    ads_data = []
+    for txt_file in txt_files:
+        with open(txt_file, 'r', encoding='utf-8', errors='ignore') as f:
+            text = f.read()
+            ads_data.append({
+                AD_ID_COLUMN: txt_file.stem,  # filename without extension
+                AD_TEXT_COLUMN: text
+            })
+    
+    df_ads = pd.DataFrame(ads_data)
+    print(f"  Loaded {len(df_ads):,} ad transcripts")
+    
+    # Load WMP metadata
+    print("Loading WMP metadata...")
+    df_metadata = pd.read_stata(metadata_path)
+    
+    # Clean metadata
+    df_metadata = df_metadata[df_metadata['cand_id'].notna()]
+    df_metadata = df_metadata[~df_metadata['cand_id'].astype(str).str.match(r'^\s*$')]
+    
+    # Create unique_id from metadata
+    def make_unique_id(row):
+        """Extract candidate name and create unique_id."""
+        pattern = r"[_,\- ]"
+        last = re.split(pattern, str(row['cand_id']))[0]
+        last = last.replace("'", "").upper()
+        district = re.sub(r"^0+", "", str(row['district'])) or "0"
+        return f"{last}_{row['state']}_{district}"
+    
+    df_metadata['unique_id'] = df_metadata.apply(make_unique_id, axis=1)
+    
+    # Apply manual corrections for ad metadata
+    ad_corrections = {
+        "LINDBECK_AK_1": "LINDBECK_AK_NA",
+        "DAVID_IA_3": "YOUNG_IA_3",
+        "ANDY_KY_6": "BARR_KY_6",
+        "BEUTLER_WA_3": "HERRERA_WA_3",
+        "RODGERS_WA_5": "MCMORRIS_WA_5"
+    }
+    df_metadata['unique_id'] = df_metadata['unique_id'].replace(ad_corrections)
+    
+    # Merge ads with metadata
+    df_ads_merged = pd.merge(df_ads, df_metadata, on=AD_ID_COLUMN, how='left')
+    
+    # Merge with DIME scores
+    df_ads_final = pd.merge(df_ads_merged, df_dime[['unique_id', 'dwdime']], 
+                            on='unique_id', how='left')
+    
+    # Rename to match config
+    df_ads_final = df_ads_final.rename(columns={'dwdime': TARGET_COLUMN})
+    
+    # Keep essential columns
+    keep_cols = [AD_ID_COLUMN, AD_TEXT_COLUMN, 'unique_id', TARGET_COLUMN, 
+                 'party', 'race_id']
+    keep_cols = [col for col in keep_cols if col in df_ads_final.columns]
+    df_ads_final = df_ads_final[keep_cols]
+    
+    # Drop ads missing text or scores
+    initial_count = len(df_ads_final)
+    df_ads_final = df_ads_final.dropna(subset=[AD_TEXT_COLUMN, TARGET_COLUMN])
+    print(f"  Dropped {initial_count - len(df_ads_final):,} ads with missing text or scores")
+    
+    # Filter by minimum length
+    if MIN_AD_LENGTH > 0:
+        df_ads_final = df_ads_final[df_ads_final[AD_TEXT_COLUMN].str.len() >= MIN_AD_LENGTH]
+        print(f"  Kept ads with length >= {MIN_AD_LENGTH} characters")
+    
+    df_ads_final = df_ads_final.reset_index(drop=True)
+    print(f"  Final dataset: {len(df_ads_final):,} ads")
+    
+    return df_ads_final
+
+
 def main():
     """
     Execute the complete Stage 1 cleaning pipeline.
@@ -242,26 +342,45 @@ def main():
     df_speeches = merge_speakers_and_speeches(SPEAKER_MAP, SPEECHES_FILE)
     
     # Step 3: Merge with ideology scores
-    print("\nStep 3: Merging with ideology scores")
+    print("\nStep 3: Merging speeches with ideology scores")
     print("-" * 40)
-    df_final = merge_with_ideology_scores(df_speeches, df_dime)
+    df_speeches_final = merge_with_ideology_scores(df_speeches, df_dime)
     
-    # Step 4: Save cleaned data
-    print("\nStep 4: Saving cleaned data")
+    # Step 4: Load and clean ads
+    print("\nStep 4: Loading and cleaning ad transcripts")
     print("-" * 40)
-    df_final.to_csv(CLEANED_SPEECHES, index=False)
-    print(f"  Saved to: {CLEANED_SPEECHES}")
+    df_ads_final = load_and_clean_ads(VIDEO_DIR, WMP_METADATA, df_dime)
+    
+    # Step 5: Save cleaned data
+    print("\nStep 5: Saving cleaned data")
+    print("-" * 40)
+    df_speeches_final.to_csv(CLEANED_SPEECHES, index=False)
+    print(f"  Speeches saved to: {CLEANED_SPEECHES}")
+    
+    if len(df_ads_final) > 0:
+        df_ads_final.to_csv(CLEANED_ADS, index=False)
+        print(f"  Ads saved to: {CLEANED_ADS}")
     
     # Summary statistics
     print("\n" + "="*80)
     print("SUMMARY")
     print("="*80)
-    print(f"Total speeches: {len(df_final):,}")
-    print(f"Unique speakers: {df_final[SPEAKER_ID_COLUMN].nunique():,}")
-    print(f"Mean ideology score: {df_final[TARGET_COLUMN].mean():.3f}")
-    print(f"Ideology score range: [{df_final[TARGET_COLUMN].min():.3f}, "
-          f"{df_final[TARGET_COLUMN].max():.3f}]")
-    print(f"\nOutput file: {CLEANED_SPEECHES}")
+    print(f"\nSPEECHES:")
+    print(f"  Total speeches: {len(df_speeches_final):,}")
+    print(f"  Unique speakers: {df_speeches_final[SPEAKER_ID_COLUMN].nunique():,}")
+    print(f"  Mean ideology score: {df_speeches_final[TARGET_COLUMN].mean():.3f}")
+    
+    if len(df_ads_final) > 0:
+        print(f"\nADS:")
+        print(f"  Total ads: {len(df_ads_final):,}")
+        print(f"  Unique candidates: {df_ads_final['unique_id'].nunique():,}")
+        print(f"  Mean ideology score: {df_ads_final[TARGET_COLUMN].mean():.3f}")
+    
+    print(f"\nOutput files:")
+    print(f"  {CLEANED_SPEECHES}")
+    if len(df_ads_final) > 0:
+        print(f"  {CLEANED_ADS}")
+    
     print("\n" + "="*80)
     print("STAGE 1 COMPLETE")
     print("="*80 + "\n")
@@ -269,3 +388,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
