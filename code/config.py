@@ -40,7 +40,12 @@ PREDICTIONS_DIR = DATA_DIR / "04_predictions"
 
 # Cleaned/merged data
 CLEANED_SPEECHES = CLEANED_DIR / "cleaned_speeches.csv"
+CLEANED_ADS = CLEANED_DIR / "cleaned_ads.csv"
 MERGED_DATA = CLEANED_DIR / "merged_speeches_ideology.csv"
+
+# Tokenized data
+TOKENIZED_SPEECHES = CLEANED_DIR / "tokenized_speeches.csv"
+TOKENIZED_ADS = CLEANED_DIR / "tokenized_ads.csv"
 
 # Features
 TFIDF_FEATURES = FEATURES_DIR / "tfidf_features.npz"
