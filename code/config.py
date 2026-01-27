@@ -1,7 +1,6 @@
-# config.py
-import pandas as pd
+# code/config.py
+
 from pathlib import Path
-import pickle
 
 # ============================================
 # BASE PATHS
@@ -70,8 +69,7 @@ EMBEDDINGS_CV_RESULTS = MODELS_DIR / "embeddings_cv_results.csv"
 # ============================================
 TEXT_COLUMN = "speech"
 TARGET_COLUMN = "dime"
-SPEAKER_ID_COLUMN = "speakerid"
-MERGE_ID_COLUMN = "unique_id" 
+SPEAKER_ID_COLUMN = "unique_id"
 
 # Ad-specific columns
 AD_TEXT_COLUMN = "ad_text"
@@ -98,6 +96,9 @@ EMBEDDINGS_PARAMS = {
 CV_FOLDS = 5
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
+
+# Parallel processing settings (for HPC)
+N_JOBS = -1  # Use all available cores (-1), or set to specific number (e.g., 8)
 
 # ============================================
 # TEXT CLEANING PARAMETERS
