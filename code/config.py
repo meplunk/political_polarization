@@ -101,13 +101,13 @@ TEST_SIZE = 0.2
 # ============================================
 # Minimum speech length (in characters) to include
 MIN_SPEECH_LENGTH = 50
+MIN_AD_LENGTH = 10
 
 # Remove stopwords?
 REMOVE_STOPWORDS = True
 
 # Lowercase text?
 LOWERCASE = True
-
 
 def save_pickle(obj, filepath):
     """Save object to pickle file"""
