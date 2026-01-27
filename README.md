@@ -1,6 +1,3 @@
-# political_polarization
-We are studying polarization in political advertising.
-
 # Political Polarization NLP Pipeline
 
 This pipeline trains machine learning models to predict political ideology from congressional speeches using TF-IDF vectorization and abstract embeddings.
