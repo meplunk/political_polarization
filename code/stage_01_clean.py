@@ -35,7 +35,7 @@ import pandas as pd
 from pathlib import Path
 from config import (
     DIME_DATA, SPEECHES_FILE, SPEAKER_MAP, VIDEO_DIR, WMP_METADATA,
-    CLEANED_SPEECHES, CLEANED_ADS, CLEANED_DIR,
+    CLEANED_SPEECHES, CLEANED_ADS_AIRINGS, CLEANED_ADS_UNIQUE, CLEANED_DIR,
     TEXT_COLUMN, TARGET_COLUMN, SPEAKER_ID_COLUMN,
     AD_TEXT_COLUMN, AD_ID_COLUMN,
     MIN_SPEECH_LENGTH, MIN_AD_LENGTH
@@ -227,13 +227,17 @@ def load_and_clean_ads(video_dir, metadata_path, df_dime):
     """
     Load ad transcripts and merge with metadata and DIME scores.
     
+    Creates two datasets:
+    1. All airings - every instance of an ad being aired (~1M rows)
+    2. Unique ads - one row per unique ad creative (~2K rows)
+    
     Args:
         video_dir: Path to directory with ad transcript .txt files
         metadata_path: Path to WMP metadata file
         df_dime: DataFrame with DIME scores
         
     Returns:
-        DataFrame with ad transcripts and ideology scores
+        Tuple of (df_airings, df_unique): DataFrames for airings and unique ads
     """
     print("Loading ad transcripts...")
     
@@ -242,7 +246,7 @@ def load_and_clean_ads(video_dir, metadata_path, df_dime):
     
     if not txt_files:
         print(f"  Warning: No .txt files found in {video_dir}")
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
     
     print(f"  Found {len(txt_files):,} ad transcript files")
     
@@ -256,12 +260,13 @@ def load_and_clean_ads(video_dir, metadata_path, df_dime):
                 AD_TEXT_COLUMN: text
             })
     
-    df_ads = pd.DataFrame(ads_data)
-    print(f"  Loaded {len(df_ads):,} ad transcripts")
+    df_ads_text = pd.DataFrame(ads_data)
+    print(f"  Loaded {len(df_ads_text):,} unique ad transcripts")
     
-    # Load WMP metadata
+    # Load WMP metadata (has one row per airing)
     print("Loading WMP metadata...")
     df_metadata = pd.read_stata(metadata_path)
+    print(f"  Loaded {len(df_metadata):,} ad airings")
     
     # Clean metadata
     df_metadata = df_metadata[df_metadata['cand_id'].notna()]
@@ -288,36 +293,48 @@ def load_and_clean_ads(video_dir, metadata_path, df_dime):
     }
     df_metadata['unique_id'] = df_metadata['unique_id'].replace(ad_corrections)
     
-    # Merge ads with metadata
-    df_ads_merged = pd.merge(df_ads, df_metadata, on=AD_ID_COLUMN, how='left')
+    # Merge metadata with DIME scores
+    df_metadata = pd.merge(df_metadata, df_dime[['unique_id', 'dwdime']], 
+                           on='unique_id', how='left')
+    df_metadata = df_metadata.rename(columns={'dwdime': TARGET_COLUMN})
     
-    # Merge with DIME scores
-    df_ads_final = pd.merge(df_ads_merged, df_dime[['unique_id', 'dwdime']], 
-                            on='unique_id', how='left')
+    # Create AIRINGS dataset: metadata for all airings
+    airings_cols = [AD_ID_COLUMN, 'unique_id', TARGET_COLUMN, 'party', 
+                    'race_id', 'biweek']
+    airings_cols = [col for col in airings_cols if col in df_metadata.columns]
+    df_airings = df_metadata[airings_cols].copy()
     
-    # Rename to match config
-    df_ads_final = df_ads_final.rename(columns={'dwdime': TARGET_COLUMN})
+    # Drop airings missing scores
+    initial_airings = len(df_airings)
+    df_airings = df_airings.dropna(subset=[TARGET_COLUMN])
+    print(f"  Kept {len(df_airings):,} airings with ideology scores "
+          f"(dropped {initial_airings - len(df_airings):,})")
     
-    # Keep essential columns
-    keep_cols = [AD_ID_COLUMN, AD_TEXT_COLUMN, 'unique_id', TARGET_COLUMN, 
-                 'party', 'race_id']
-    keep_cols = [col for col in keep_cols if col in df_ads_final.columns]
-    df_ads_final = df_ads_final[keep_cols]
+    # Create UNIQUE ADS dataset: one row per ad with text
+    # Merge unique ad text with metadata (using first occurrence of each ad)
+    df_unique = df_metadata.drop_duplicates(subset=[AD_ID_COLUMN], keep='first')
+    df_unique = pd.merge(df_ads_text, df_unique, on=AD_ID_COLUMN, how='left')
     
-    # Drop ads missing text or scores
-    initial_count = len(df_ads_final)
-    df_ads_final = df_ads_final.dropna(subset=[AD_TEXT_COLUMN, TARGET_COLUMN])
-    print(f"  Dropped {initial_count - len(df_ads_final):,} ads with missing text or scores")
+    # Keep essential columns for unique ads
+    unique_cols = [AD_ID_COLUMN, AD_TEXT_COLUMN, 'unique_id', TARGET_COLUMN, 'party']
+    unique_cols = [col for col in unique_cols if col in df_unique.columns]
+    df_unique = df_unique[unique_cols]
+    
+    # Drop unique ads missing text or scores
+    initial_unique = len(df_unique)
+    df_unique = df_unique.dropna(subset=[AD_TEXT_COLUMN, TARGET_COLUMN])
+    print(f"  Kept {len(df_unique):,} unique ads with text and scores "
+          f"(dropped {initial_unique - len(df_unique):,})")
     
     # Filter by minimum length
     if MIN_AD_LENGTH > 0:
-        df_ads_final = df_ads_final[df_ads_final[AD_TEXT_COLUMN].str.len() >= MIN_AD_LENGTH]
+        df_unique = df_unique[df_unique[AD_TEXT_COLUMN].str.len() >= MIN_AD_LENGTH]
         print(f"  Kept ads with length >= {MIN_AD_LENGTH} characters")
     
-    df_ads_final = df_ads_final.reset_index(drop=True)
-    print(f"  Final dataset: {len(df_ads_final):,} ads")
+    df_airings = df_airings.reset_index(drop=True)
+    df_unique = df_unique.reset_index(drop=True)
     
-    return df_ads_final
+    return df_airings, df_unique
 
 
 def main():
@@ -349,7 +366,7 @@ def main():
     # Step 4: Load and clean ads
     print("\nStep 4: Loading and cleaning ad transcripts")
     print("-" * 40)
-    df_ads_final = load_and_clean_ads(VIDEO_DIR, WMP_METADATA, df_dime)
+    df_ads_airings, df_ads_unique = load_and_clean_ads(VIDEO_DIR, WMP_METADATA, df_dime)
     
     # Step 5: Save cleaned data
     print("\nStep 5: Saving cleaned data")
@@ -357,9 +374,13 @@ def main():
     df_speeches_final.to_csv(CLEANED_SPEECHES, index=False)
     print(f"  Speeches saved to: {CLEANED_SPEECHES}")
     
-    if len(df_ads_final) > 0:
-        df_ads_final.to_csv(CLEANED_ADS, index=False)
-        print(f"  Ads saved to: {CLEANED_ADS}")
+    if len(df_ads_airings) > 0:
+        df_ads_airings.to_csv(CLEANED_ADS_AIRINGS, index=False)
+        print(f"  Ad airings saved to: {CLEANED_ADS_AIRINGS}")
+    
+    if len(df_ads_unique) > 0:
+        df_ads_unique.to_csv(CLEANED_ADS_UNIQUE, index=False)
+        print(f"  Unique ads saved to: {CLEANED_ADS_UNIQUE}")
     
     # Summary statistics
     print("\n" + "="*80)
@@ -370,16 +391,24 @@ def main():
     print(f"  Unique speakers: {df_speeches_final[SPEAKER_ID_COLUMN].nunique():,}")
     print(f"  Mean ideology score: {df_speeches_final[TARGET_COLUMN].mean():.3f}")
     
-    if len(df_ads_final) > 0:
-        print(f"\nADS:")
-        print(f"  Total ads: {len(df_ads_final):,}")
-        print(f"  Unique candidates: {df_ads_final['unique_id'].nunique():,}")
-        print(f"  Mean ideology score: {df_ads_final[TARGET_COLUMN].mean():.3f}")
+    if len(df_ads_airings) > 0:
+        print(f"\nAD AIRINGS:")
+        print(f"  Total airings: {len(df_ads_airings):,}")
+        print(f"  Unique ads: {df_ads_airings[AD_ID_COLUMN].nunique():,}")
+        print(f"  Mean ideology score: {df_ads_airings[TARGET_COLUMN].mean():.3f}")
+    
+    if len(df_ads_unique) > 0:
+        print(f"\nUNIQUE ADS (for tokenization):")
+        print(f"  Total unique ads: {len(df_ads_unique):,}")
+        print(f"  Unique candidates: {df_ads_unique['unique_id'].nunique():,}")
+        print(f"  Mean ideology score: {df_ads_unique[TARGET_COLUMN].mean():.3f}")
     
     print(f"\nOutput files:")
     print(f"  {CLEANED_SPEECHES}")
-    if len(df_ads_final) > 0:
-        print(f"  {CLEANED_ADS}")
+    if len(df_ads_airings) > 0:
+        print(f"  {CLEANED_ADS_AIRINGS}")
+    if len(df_ads_unique) > 0:
+        print(f"  {CLEANED_ADS_UNIQUE}")
     
     print("\n" + "="*80)
     print("STAGE 1 COMPLETE")
