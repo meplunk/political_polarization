@@ -3,7 +3,7 @@
 FILE: stage_01_clean.py
 AUTHOR: Mary Edith Plunkett
 PROJECT: Political Polarization Project (PPP)
-DATE: October 23, 2025
+CREATED: October 23, 2025
 MODIFIED: January 27, 2026
 ===============================================================================
 PURPOSE:
