@@ -20,9 +20,13 @@ INPUT FILES:
     - data/01_raw/dime_recipients_1979_2024.csv
     - data/01_raw/speeches_114.txt
     - data/01_raw/114_SpeakerMap.txt
+    - data/01_raw/2016HouseVideo/*.txt (ad transcripts)
+    - data/01_raw/wmp-house-2016-v1.0.dta (ad metadata)
 
 OUTPUT FILES:
     - data/02_cleaned/cleaned_speeches.csv
+    - data/02_cleaned/cleaned_ads_airings.csv (~1M rows - all airings)
+    - data/02_cleaned/cleaned_ads_unique.csv (~2K rows - unique ads)
 
 USAGE:
     python code/stage_01_clean.py
