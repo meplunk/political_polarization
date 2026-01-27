@@ -186,7 +186,6 @@ def merge_with_ideology_scores(df_speeches, df_dime):
     
     # Rename columns to match config
     column_mapping = {
-        'speakerid': SPEAKER_ID_COLUMN,
         'speech': TEXT_COLUMN,
         'dwdime': TARGET_COLUMN
     }
