@@ -2,19 +2,22 @@
 ===============================================================================
 FILE: stage_01_clean.py
 AUTHOR: Mary Edith Plunkett
-PROJECT: Political Polarization Project (PPP)
-CREATED: October 23, 2025
-MODIFIED: January 27, 2026
+PROJECT: Political Polarization Project
+DATE: January 27, 2026
 ===============================================================================
 PURPOSE:
-    Clean and merge Congressional speeches with DIME ideology scores.
-    This is Stage 1 of the NLP pipeline.
+    Clean and merge Congressional speeches and ad transcripts with DIME 
+    ideology scores. This is Stage 1 of the NLP pipeline.
 
 DESCRIPTION:
     1. Filter DIME recipients to federal candidates (2013-2018)
     2. Merge Congressional speeches with speaker metadata
     3. Link speeches to DIME ideology scores
-    4. Create standardized unique_id for merging (LASTNAME_STATE_DISTRICT)
+    4. Load ad transcripts and apply WMP cleaning filters
+    5. Link ads to DIME scores
+    6. Create two ad files:
+       - All airings (for analysis of ad volume/timing)
+       - Unique ads (for text analysis/tokenization)
 
 INPUT FILES:
     - data/01_raw/dime_recipients_1979_2024.csv
@@ -25,14 +28,14 @@ INPUT FILES:
 
 OUTPUT FILES:
     - data/02_cleaned/cleaned_speeches.csv
-    - data/02_cleaned/cleaned_ads_airings.csv (~1M rows - all airings)
-    - data/02_cleaned/cleaned_ads_unique.csv (~2K rows - unique ads)
+    - data/02_cleaned/cleaned_ads_airings.csv
+    - data/02_cleaned/cleaned_ads_unique.csv
 
 USAGE:
     python code/stage_01_clean.py
-
 ===============================================================================
 """
+
 import os
 import re
 import pandas as pd
@@ -69,7 +72,6 @@ def filter_dime_recipients(dime_path):
     print(f"  After filtering to federal candidates: {len(df):,} rows")
     
     # Create unique identifier: LASTNAME_STATE_DISTRICT
-    # Example: "PELOSI_CA_12"
     df['unique_id'] = (
         df['lname'].str.split().str[0].str.upper() + '_' +
         df['distcyc'].str.split('_', n=1).str[1]
@@ -81,17 +83,9 @@ def filter_dime_recipients(dime_path):
 def merge_speakers_and_speeches(speaker_path, speech_path):
     """
     Merge Congressional Record speaker metadata with speech texts.
-    
-    Args:
-        speaker_path: Path to speaker map file
-        speech_path: Path to speeches file
-        
-    Returns:
-        DataFrame with merged speaker and speech data
     """
     print("Loading Congressional Record data...")
     
-    # Load speaker metadata and speeches (pipe-delimited)
     df_speakers = pd.read_csv(speaker_path, delimiter="|", encoding="latin1")
     df_speeches = pd.read_csv(speech_path, delimiter="|", encoding="latin1",
                               on_bad_lines="warn")
@@ -99,28 +93,21 @@ def merge_speakers_and_speeches(speaker_path, speech_path):
     print(f"  Loaded {len(df_speakers):,} speakers")
     print(f"  Loaded {len(df_speeches):,} speeches")
     
-    # Merge on speech_id
     df_merged = pd.merge(df_speakers, df_speeches, on="speech_id", how="right")
     
-    # Keep essential columns
     keep_cols = ["speakerid", "speech_id", "lastname", "firstname",
                  "speech", "state", "district"]
     df_merged = df_merged[keep_cols]
     
-    # Remove rows with missing speaker names
     df_merged = df_merged[df_merged['lastname'].notna() & 
                           (df_merged['lastname'] != '')]
     
-    # Create unique_id to match DIME format
-    # For House: LASTNAME_STATE_DISTRICT (e.g., "PELOSI_CA_12")
-    # For Senate: LASTNAME_STATE_S (e.g., "WARREN_MA_S")
     df_merged['unique_id'] = (
         df_merged['lastname'].str.split().str[0].str.upper() + '_' +
         df_merged['state'].astype(str).str.upper() + '_' +
         df_merged['district'].apply(lambda x: str(int(x)) if pd.notnull(x) else 'S')
     )
     
-    # Apply manual corrections for known naming inconsistencies
     df_merged = apply_name_corrections(df_merged)
     
     print(f"  Merged dataset: {len(df_merged):,} speeches")
@@ -129,18 +116,8 @@ def merge_speakers_and_speeches(speaker_path, speech_path):
 
 
 def apply_name_corrections(df):
-    """
-    Apply manual corrections for known mismatches between 
-    Congressional Record and DIME naming conventions.
-    
-    Args:
-        df: DataFrame with unique_id column
-        
-    Returns:
-        DataFrame with corrected unique_ids
-    """
+    """Apply manual corrections for known naming mismatches."""
     corrections = {
-        # At-large districts (0 -> 1)
         "NORTON_DC_0": "NORTON_DC_1",
         "PIERLUISI_PR_0": "PIERLUISI_PR_1",
         "CARNEY_DE_0": "CARNEY_DE_1",
@@ -153,15 +130,11 @@ def apply_name_corrections(df):
         "YOUNG_AK_0": "YOUNG_AK_1",
         "SABLAN_MP_0": "SABLAN_MP_1",
         "BORDALLO_GU_0": "BORDALLO_GU_1",
-        
-        # Hyphenated last names
         "VAN_MD_8": "VANHOLLEN_MD_8",
         "ROS-LEHTINEN_FL_27": "ROS_FL_27",
         "DIAZ-BALART_FL_25": "DIAZ_FL_25",
         "ROYBAL-ALLARD_CA_40": "ROYBAL_CA_40",
-        
-        # Name changes
-        "JACKSON_TX_18": "LEE_TX_18"  # Sheila Jackson Lee
+        "JACKSON_TX_18": "LEE_TX_18"
     }
     
     df['unique_id'] = df['unique_id'].replace(corrections)
@@ -169,34 +142,22 @@ def apply_name_corrections(df):
 
 
 def merge_with_ideology_scores(df_speeches, df_dime):
-    """
-    Merge speeches with DIME ideology scores.
-    
-    Args:
-        df_speeches: DataFrame with speeches and unique_id
-        df_dime: DataFrame with DIME scores and unique_id
-        
-    Returns:
-        DataFrame with speeches and ideology scores
-    """
+    """Merge speeches with DIME ideology scores."""
     print("Merging speeches with ideology scores...")
     
-    # Merge on unique_id
     merged = pd.merge(df_speeches, df_dime, on='unique_id', how='left')
     
-    # Rename columns to match config
     column_mapping = {
         'speech': TEXT_COLUMN,
         'dwdime': TARGET_COLUMN
     }
     merged = merged.rename(columns=column_mapping)
     
-    # Keep essential columns
     keep_cols = [
-        'speakerid',      
+        'speakerid',
         'speech_id',
         TEXT_COLUMN,
-        'unique_id', 
+        'unique_id',
         'lastname',
         'firstname',
         'state',
@@ -206,16 +167,13 @@ def merge_with_ideology_scores(df_speeches, df_dime):
         'gwinner'
     ]
     
-    # Only keep columns that exist
     keep_cols = [col for col in keep_cols if col in merged.columns]
     merged = merged[keep_cols]
     
-    # Drop speeches missing text or ideology scores
     initial_count = len(merged)
     merged = merged.dropna(subset=[TEXT_COLUMN, TARGET_COLUMN])
     print(f"  Dropped {initial_count - len(merged):,} rows with missing text or scores")
     
-    # Filter by minimum speech length
     if MIN_SPEECH_LENGTH > 0:
         merged = merged[merged[TEXT_COLUMN].str.len() >= MIN_SPEECH_LENGTH]
         print(f"  Kept speeches with length >= {MIN_SPEECH_LENGTH} characters")
@@ -230,21 +188,10 @@ def load_and_clean_ads(video_dir, metadata_path, df_dime):
     """
     Load ad transcripts and merge with metadata and DIME scores.
     
-    Creates two datasets:
-    1. All airings - every instance of an ad being aired (~1M rows)
-    2. Unique ads - one row per unique ad creative (~2K rows)
-    
-    Args:
-        video_dir: Path to directory with ad transcript .txt files
-        metadata_path: Path to WMP metadata file
-        df_dime: DataFrame with DIME scores
-        
-    Returns:
-        Tuple of (df_airings, df_unique): DataFrames for airings and unique ads
+    Applies WMP cleaning logic (Anderson, Ciliberto, Leyden 2025).
     """
     print("Loading ad transcripts...")
     
-    # Collect all .txt files from video directory
     txt_files = list(Path(video_dir).glob("*.txt"))
     
     if not txt_files:
@@ -253,40 +200,88 @@ def load_and_clean_ads(video_dir, metadata_path, df_dime):
     
     print(f"  Found {len(txt_files):,} ad transcript files")
     
-    # Read all ad transcripts
     ads_data = []
     for txt_file in txt_files:
         with open(txt_file, 'r', encoding='utf-8', errors='ignore') as f:
             text = f.read()
             ads_data.append({
-                AD_ID_COLUMN: txt_file.stem,  # filename without extension
+                AD_ID_COLUMN: txt_file.stem,
                 AD_TEXT_COLUMN: text
             })
     
     df_ads_text = pd.DataFrame(ads_data)
     print(f"  Loaded {len(df_ads_text):,} unique ad transcripts")
     
-    # Load WMP metadata (has one row per airing)
-    print("Loading WMP metadata...")
-    df_metadata = pd.read_stata(metadata_path)
-    print(f"  Loaded {len(df_metadata):,} ad airings")
+    # Load and clean WMP metadata
+    print("Loading and cleaning WMP metadata...")
+    df = pd.read_stata(metadata_path, convert_categoricals=False)
+    print(f"  Loaded {len(df):,} ad airings")
     
-    # Clean metadata
-    df_metadata = df_metadata[df_metadata['cand_id'].notna()]
-    df_metadata = df_metadata[~df_metadata['cand_id'].astype(str).str.match(r'^\s*$')]
+    # Apply Anderson, Ciliberto, Leyden (2025) cleaning
+    print("  Applying data filters...")
     
-    # Create unique_id from metadata
+    df['state'] = df['categorystate']
+    
+    # Restrict to general election
+    df = df[df['election'] == 'GENERAL']
+    print(f"    After general election filter: {len(df):,}")
+    
+    # Restrict to major affiliates
+    df = df[df['affiliate'].isin(['ABC', 'CBS', 'CW', 'FOX', 'NBC'])]
+    print(f"    After major affiliate filter: {len(df):,}")
+    
+    # Drop low-cost ads (< 5th percentile)
+    est_cost_5pct = df['est_cost'].quantile(0.05)
+    df = df[df['est_cost'] > est_cost_5pct]
+    print(f"    After cost filter (>${est_cost_5pct:.0f}): {len(df):,}")
+    
+    # Set senate district to 60
+    df.loc[df['senate'] == 1, 'district'] = '60'
+    
+    # Create time variables
+    df['year'] = '2016'
+    df['race_id'] = df['state'] + df['district'].astype(str) + '-' + df['year']
+    
+    election_day = pd.to_datetime('2016-11-08')
+    df['day'] = (election_day - df['airdate']).dt.days
+    df['week'] = df['day'] // 7
+    df['biweek'] = df['day'] // 14
+    
+    # Filter by issue coding
+    df = df[df['codingstatus'] == 1]
+    print(f"    After issue coding filter: {len(df):,}")
+    
+    # Get issue variables
+    issue_vars = [col for col in df.columns if 'issue' in col.lower() and 
+                  col not in ['issue', 'issue96', 'issue97', 'issue97_txt', 'codingstatus']]
+    
+    # Correct issue coding (anything > 0 becomes 1)
+    for var in issue_vars:
+        if var in df.columns:
+            df[var] = df[var].apply(lambda x: 1 if pd.notnull(x) and x > 0 else 0)
+    
+    # Keep only ads with at least one coded issue
+    df['n_coded_issues'] = df[issue_vars].sum(axis=1)
+    df = df[df['n_coded_issues'] > 0]
+    df = df.drop(columns=['n_coded_issues'])
+    print(f"    After requiring coded issues: {len(df):,}")
+    
+    # Clean candidate IDs
+    df = df[df['cand_id'].notna()]
+    df = df[~df['cand_id'].astype(str).str.match(r'^\s*$')]
+    print(f"    After cleaning cand_id: {len(df):,}")
+    
+    # Create unique_id
     def make_unique_id(row):
-        """Extract candidate name and create unique_id."""
         pattern = r"[_,\- ]"
         last = re.split(pattern, str(row['cand_id']))[0]
         last = last.replace("'", "").upper()
         district = re.sub(r"^0+", "", str(row['district'])) or "0"
         return f"{last}_{row['state']}_{district}"
     
-    df_metadata['unique_id'] = df_metadata.apply(make_unique_id, axis=1)
+    df['unique_id'] = df.apply(make_unique_id, axis=1)
     
-    # Apply manual corrections for ad metadata
+    # Apply manual corrections
     ad_corrections = {
         "LINDBECK_AK_1": "LINDBECK_AK_NA",
         "DAVID_IA_3": "YOUNG_IA_3",
@@ -294,45 +289,43 @@ def load_and_clean_ads(video_dir, metadata_path, df_dime):
         "BEUTLER_WA_3": "HERRERA_WA_3",
         "RODGERS_WA_5": "MCMORRIS_WA_5"
     }
-    df_metadata['unique_id'] = df_metadata['unique_id'].replace(ad_corrections)
+    df['unique_id'] = df['unique_id'].replace(ad_corrections)
     
-    # Merge metadata with DIME scores
-    df_metadata = pd.merge(df_metadata, df_dime[['unique_id', 'dwdime']], 
-                           on='unique_id', how='left')
-    df_metadata = df_metadata.rename(columns={'dwdime': TARGET_COLUMN})
+    # Merge with DIME scores (deduplicated)
+    print("  Merging with DIME scores...")
+    df_dime_dedup = df_dime.sort_values('cycle', ascending=False).drop_duplicates(
+        subset=['unique_id'], keep='first'
+    )
     
-    # Create AIRINGS dataset: metadata for all airings
+    df = pd.merge(df, df_dime_dedup[['unique_id', 'dwdime']], 
+                  on='unique_id', how='left')
+    df = df.rename(columns={'dwdime': TARGET_COLUMN})
+    
+    # Create AIRINGS dataset
     airings_cols = [AD_ID_COLUMN, 'unique_id', TARGET_COLUMN, 'party', 
                     'race_id', 'biweek']
-    airings_cols = [col for col in airings_cols if col in df_metadata.columns]
-    df_airings = df_metadata[airings_cols].copy()
+    airings_cols = [col for col in airings_cols if col in df.columns]
+    df_airings = df[airings_cols].copy()
     
-    # Drop airings missing scores
     initial_airings = len(df_airings)
     df_airings = df_airings.dropna(subset=[TARGET_COLUMN])
-    print(f"  Kept {len(df_airings):,} airings with ideology scores "
-          f"(dropped {initial_airings - len(df_airings):,})")
+    print(f"  Airings: kept {len(df_airings):,} with scores (dropped {initial_airings - len(df_airings):,})")
     
-    # Create UNIQUE ADS dataset: one row per ad with text
-    # Merge unique ad text with metadata (using first occurrence of each ad)
-    df_unique = df_metadata.drop_duplicates(subset=[AD_ID_COLUMN], keep='first')
+    # Create UNIQUE ADS dataset
+    df_unique = df.drop_duplicates(subset=[AD_ID_COLUMN], keep='first')
     df_unique = pd.merge(df_ads_text, df_unique, on=AD_ID_COLUMN, how='left')
     
-    # Keep essential columns for unique ads
     unique_cols = [AD_ID_COLUMN, AD_TEXT_COLUMN, 'unique_id', TARGET_COLUMN, 'party']
     unique_cols = [col for col in unique_cols if col in df_unique.columns]
     df_unique = df_unique[unique_cols]
     
-    # Drop unique ads missing text or scores
     initial_unique = len(df_unique)
     df_unique = df_unique.dropna(subset=[AD_TEXT_COLUMN, TARGET_COLUMN])
-    print(f"  Kept {len(df_unique):,} unique ads with text and scores "
-          f"(dropped {initial_unique - len(df_unique):,})")
     
-    # Filter by minimum length
     if MIN_AD_LENGTH > 0:
         df_unique = df_unique[df_unique[AD_TEXT_COLUMN].str.len() >= MIN_AD_LENGTH]
-        print(f"  Kept ads with length >= {MIN_AD_LENGTH} characters")
+    
+    print(f"  Unique ads: kept {len(df_unique):,} with text and scores (dropped {initial_unique - len(df_unique):,})")
     
     df_airings = df_airings.reset_index(drop=True)
     df_unique = df_unique.reset_index(drop=True)
@@ -341,14 +334,11 @@ def load_and_clean_ads(video_dir, metadata_path, df_dime):
 
 
 def main():
-    """
-    Execute the complete Stage 1 cleaning pipeline.
-    """
+    """Execute the complete Stage 1 cleaning pipeline."""
     print("\n" + "="*80)
     print("STAGE 1: DATA CLEANING")
     print("="*80 + "\n")
     
-    # Create output directory if it doesn't exist
     CLEANED_DIR.mkdir(parents=True, exist_ok=True)
     
     # Step 1: Filter DIME recipients
@@ -391,20 +381,26 @@ def main():
     print("="*80)
     print(f"\nSPEECHES:")
     print(f"  Total speeches: {len(df_speeches_final):,}")
-    print(f"  Unique speakers: {int(df_speeches_final[SPEAKER_ID_COLUMN].nunique()):,}")
-    print(f"  Mean ideology score: {df_speeches_final[TARGET_COLUMN].mean():.3f}")
+    n_speakers = df_speeches_final['speakerid'].nunique()
+    print(f"  Unique speakers: {n_speakers:,}")
+    mean_score = df_speeches_final[TARGET_COLUMN].mean()
+    print(f"  Mean ideology score: {mean_score:.3f}")
     
     if len(df_ads_airings) > 0:
         print(f"\nAD AIRINGS:")
         print(f"  Total airings: {len(df_ads_airings):,}")
-        print(f"  Unique ads: {int(df_ads_airings[AD_ID_COLUMN].nunique()):,}")
-        print(f"  Mean ideology score: {df_ads_airings[TARGET_COLUMN].mean():.3f}")
+        n_unique_ads = df_ads_airings[AD_ID_COLUMN].nunique()
+        print(f"  Unique ads: {n_unique_ads:,}")
+        mean_score = df_ads_airings[TARGET_COLUMN].mean()
+        print(f"  Mean ideology score: {mean_score:.3f}")
     
     if len(df_ads_unique) > 0:
         print(f"\nUNIQUE ADS (for tokenization):")
         print(f"  Total unique ads: {len(df_ads_unique):,}")
-        print(f"  Unique candidates: {int(df_ads_unique['unique_id'].nunique()):,}")
-        print(f"  Mean ideology score: {df_ads_unique[TARGET_COLUMN].mean():.3f}")
+        n_candidates = df_ads_unique['unique_id'].nunique()
+        print(f"  Unique candidates: {n_candidates:,}")
+        mean_score = df_ads_unique[TARGET_COLUMN].mean()
+        print(f"  Mean ideology score: {mean_score:.3f}")
     
     print(f"\nOutput files:")
     print(f"  {CLEANED_SPEECHES}")
@@ -420,4 +416,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
