@@ -3,7 +3,6 @@ import pandas as pd
 from pathlib import Path
 import pickle
 
-
 # ============================================
 # BASE PATHS
 # ============================================
@@ -40,12 +39,13 @@ PREDICTIONS_DIR = DATA_DIR / "04_predictions"
 
 # Cleaned/merged data
 CLEANED_SPEECHES = CLEANED_DIR / "cleaned_speeches.csv"
-CLEANED_ADS = CLEANED_DIR / "cleaned_ads.csv"
+CLEANED_ADS_AIRINGS = CLEANED_DIR / "cleaned_ads_airings.csv"  # All airings (~1M rows)
+CLEANED_ADS_UNIQUE = CLEANED_DIR / "cleaned_ads_unique.csv"    # Unique ads (~2K rows)
 MERGED_DATA = CLEANED_DIR / "merged_speeches_ideology.csv"
 
 # Tokenized data
 TOKENIZED_SPEECHES = CLEANED_DIR / "tokenized_speeches.csv"
-TOKENIZED_ADS = CLEANED_DIR / "tokenized_ads.csv"
+TOKENIZED_ADS = CLEANED_DIR / "tokenized_ads_unique.csv"  # Only tokenize unique ads
 
 # Features
 TFIDF_FEATURES = FEATURES_DIR / "tfidf_features.npz"
@@ -71,6 +71,8 @@ EMBEDDINGS_CV_RESULTS = MODELS_DIR / "embeddings_cv_results.csv"
 TEXT_COLUMN = "speech"
 TARGET_COLUMN = "dime"
 SPEAKER_ID_COLUMN = "unique_id"
+
+# Ad-specific columns
 AD_TEXT_COLUMN = "ad_text"
 AD_ID_COLUMN = "vidfile"
 
