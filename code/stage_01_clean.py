@@ -193,10 +193,10 @@ def merge_with_ideology_scores(df_speeches, df_dime):
     
     # Keep essential columns
     keep_cols = [
-        SPEAKER_ID_COLUMN,
+        'speakerid',      
         'speech_id',
         TEXT_COLUMN,
-        'unique_id',
+        'unique_id', 
         'lastname',
         'firstname',
         'state',
