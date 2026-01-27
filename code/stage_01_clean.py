@@ -392,19 +392,19 @@ def main():
     print("="*80)
     print(f"\nSPEECHES:")
     print(f"  Total speeches: {len(df_speeches_final):,}")
-    print(f"  Unique speakers: {df_speeches_final[SPEAKER_ID_COLUMN].nunique():,}")
+    print(f"  Unique speakers: {int(df_speeches_final[SPEAKER_ID_COLUMN].nunique()):,}")
     print(f"  Mean ideology score: {df_speeches_final[TARGET_COLUMN].mean():.3f}")
     
     if len(df_ads_airings) > 0:
         print(f"\nAD AIRINGS:")
         print(f"  Total airings: {len(df_ads_airings):,}")
-        print(f"  Unique ads: {df_ads_airings[AD_ID_COLUMN].nunique():,}")
+        print(f"  Unique ads: {int(df_ads_airings[AD_ID_COLUMN].nunique()):,}")
         print(f"  Mean ideology score: {df_ads_airings[TARGET_COLUMN].mean():.3f}")
     
     if len(df_ads_unique) > 0:
         print(f"\nUNIQUE ADS (for tokenization):")
         print(f"  Total unique ads: {len(df_ads_unique):,}")
-        print(f"  Unique candidates: {df_ads_unique['unique_id'].nunique():,}")
+        print(f"  Unique candidates: {int(df_ads_unique['unique_id'].nunique()):,}")
         print(f"  Mean ideology score: {df_ads_unique[TARGET_COLUMN].mean():.3f}")
     
     print(f"\nOutput files:")
