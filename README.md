@@ -33,8 +33,8 @@ This project uses the following datasets (see `data/01_raw/` for details):
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/congressional-ideology-nlp.git
-cd congressional-ideology-nlp
+git clone https://github.com/meplunk/political_polarization.git
+cd political_polarization
 ```
 
 2. **Install dependencies**
