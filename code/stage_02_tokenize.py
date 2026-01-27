@@ -48,14 +48,24 @@ import pandas as pd
 import spacy
 from tqdm import tqdm
 from pathlib import Path
+import multiprocessing
 from config import (
     CLEANED_SPEECHES, CLEANED_ADS_UNIQUE,
     TOKENIZED_SPEECHES, TOKENIZED_ADS,
     CLEANED_DIR,
     TEXT_COLUMN, TARGET_COLUMN,
     AD_TEXT_COLUMN, AD_ID_COLUMN,
-    REMOVE_STOPWORDS, LOWERCASE
+    REMOVE_STOPWORDS, LOWERCASE,
+    N_JOBS
 )
+
+# Determine number of processes to use
+if N_JOBS == -1:
+    n_processes = multiprocessing.cpu_count()
+else:
+    n_processes = N_JOBS
+
+print(f"Using {n_processes} CPU cores for parallel processing")
 
 # Load spaCy's English language model
 # Disable NER and parser for faster processing (we only need tokenization)
@@ -65,7 +75,7 @@ nlp = spacy.load("en_core_web_sm", disable=["ner", "parser"])
 
 def tokenize_text(text_series, batch_size=500):
     """
-    Preprocess text using spaCy linguistic pipeline.
+    Preprocess text using spaCy linguistic pipeline with parallel processing.
     
     Performs:
     - Tokenization: split text into words
@@ -87,9 +97,10 @@ def tokenize_text(text_series, batch_size=500):
     """
     cleaned_texts = []
     
-    # Process texts in batches using spaCy's pipeline
+    # Process texts in batches using spaCy's pipeline with multiprocessing
+    # n_process uses multiple CPU cores for parallel processing
     for doc in tqdm(
-        nlp.pipe(text_series, batch_size=batch_size),
+        nlp.pipe(text_series, batch_size=batch_size, n_process=n_processes),
         total=len(text_series),
         desc="Tokenizing text"
     ):
