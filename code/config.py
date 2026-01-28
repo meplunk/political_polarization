@@ -46,10 +46,14 @@ MERGED_DATA = CLEANED_DIR / "merged_speeches_ideology.csv"
 # Tokenized data
 TOKENIZED_SPEECHES = TOKENS_DIR / "tokenized_speeches.csv"
 TOKENIZED_ADS = TOKENS_DIR / "tokenized_ads_unique.csv"  # Only tokenize unique ads
+AGG_TOKENIZED_SPEECHES = TOKENS_DIR / "agg_tokenized_speeches.csv"
 
 # Features
 TFIDF_FEATURES = VECTORS_DIR / "tfidf_features.npz"
 EMBEDDINGS_FEATURES = VECTORS_DIR / "embeddings.npy"
+
+# Vectorizers
+TFIDF_VECTORIZER = VECTORS_DIR / "tfidf_vectorizer.pkl"
 
 # Predictions
 TFIDF_PREDICTIONS = PREDICTIONS_DIR / "tfidf_predictions.csv"
@@ -58,8 +62,8 @@ EMBEDDINGS_PREDICTIONS = PREDICTIONS_DIR / "embeddings_predictions.csv"
 # ============================================
 # MODEL PATHS
 # ============================================
-TFIDF_MODEL = MODELS_DIR / "tfidf_pipeline.pkl"
-EMBEDDINGS_MODEL = MODELS_DIR / "embeddings_pipeline.pkl"
+TFIDF_MODEL = MODELS_DIR / "tfidf_model.pkl"
+EMBEDDINGS_MODEL = MODELS_DIR / "embeddings_model.pkl"
 
 # CV results
 TFIDF_CV_RESULTS = MODELS_DIR / "tfidf_cv_results.csv"
