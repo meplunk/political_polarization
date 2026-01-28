@@ -33,8 +33,9 @@ ELECTION_DATA = RAW_DIR / "medsl_data_clean.dta"
 # PROCESSED DATA PATHS
 # ============================================
 CLEANED_DIR = DATA_DIR / "02_cleaned"
-FEATURES_DIR = DATA_DIR / "03_features"
-PREDICTIONS_DIR = DATA_DIR / "04_predictions"
+TOKENS_DIR = DATA_DIR / "03_tokens"
+VECTORS_DIR = DATA_DIR / "O4_vectors"
+PREDICTIONS_DIR = DATA_DIR / "05_predictions"
 
 # Cleaned/merged data
 CLEANED_SPEECHES = CLEANED_DIR / "cleaned_speeches.csv"
@@ -43,12 +44,12 @@ CLEANED_ADS_UNIQUE = CLEANED_DIR / "cleaned_ads_unique.csv"    # Unique ads (~2K
 MERGED_DATA = CLEANED_DIR / "merged_speeches_ideology.csv"
 
 # Tokenized data
-TOKENIZED_SPEECHES = CLEANED_DIR / "tokenized_speeches.csv"
-TOKENIZED_ADS = CLEANED_DIR / "tokenized_ads_unique.csv"  # Only tokenize unique ads
+TOKENIZED_SPEECHES = TOKENS_DIR / "tokenized_speeches.csv"
+TOKENIZED_ADS = TOKENS_DIR / "tokenized_ads_unique.csv"  # Only tokenize unique ads
 
 # Features
-TFIDF_FEATURES = FEATURES_DIR / "tfidf_features.npz"
-EMBEDDINGS_FEATURES = FEATURES_DIR / "embeddings.npy"
+TFIDF_FEATURES = VECTORS_DIR / "tfidf_features.npz"
+EMBEDDINGS_FEATURES = VECTORS_DIR / "embeddings.npy"
 
 # Predictions
 TFIDF_PREDICTIONS = PREDICTIONS_DIR / "tfidf_predictions.csv"
