@@ -93,7 +93,7 @@ def load_tokenized_data():
     print(f"Loaded {len(speeches_df):,} speakers with speech tokens and metadata")
 
     ads_token_col = "tokenized_ad"
-    speech_token_col = "speech"
+    speech_token_col = "tokenized_speech"
     target_col = "dime"
 
     # --- Clean data: remove rows with missing values ---

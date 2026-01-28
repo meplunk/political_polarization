@@ -16,7 +16,7 @@ def aggregate_by_speaker(df: pd.DataFrame) -> pd.DataFrame:
     agg_dict = {
         'gen.vote.pct': 'first',
         'gwinner': 'first',
-        'dwdime': 'first',
+        'dime': 'first',
         'tokenized_speech': lambda x: list(chain.from_iterable(x))
     }
 
