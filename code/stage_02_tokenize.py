@@ -48,24 +48,14 @@ import pandas as pd
 import spacy
 from tqdm import tqdm
 from pathlib import Path
-import multiprocessing
 from config import (
     CLEANED_SPEECHES, CLEANED_ADS_UNIQUE,
     TOKENIZED_SPEECHES, TOKENIZED_ADS,
     CLEANED_DIR,
     TEXT_COLUMN, TARGET_COLUMN,
     AD_TEXT_COLUMN, AD_ID_COLUMN,
-    REMOVE_STOPWORDS, LOWERCASE,
-    N_JOBS
+    REMOVE_STOPWORDS, LOWERCASE
 )
-
-# Determine number of processes to use
-if N_JOBS == -1:
-    n_processes = multiprocessing.cpu_count()
-else:
-    n_processes = N_JOBS
-
-print(f"Using {n_processes} CPU cores for parallel processing")
 
 # Load spaCy's English language model
 # Disable NER and parser for faster processing (we only need tokenization)
@@ -73,59 +63,47 @@ print("Loading spaCy model...")
 nlp = spacy.load("en_core_web_sm", disable=["ner", "parser"])
 
 
-def tokenize_text(text_series, batch_size=500):
+from tqdm import tqdm
+import sys
+
+def tokenize_text(
+    text_series,
+    batch_size=500,
+    n_process=4
+):
     """
-    Preprocess text using spaCy linguistic pipeline with parallel processing.
-    
-    Performs:
-    - Tokenization: split text into words
-    - Lowercasing: normalize text (if enabled in config)
-    - Stopword removal: remove common words (if enabled in config)
-    - Punctuation removal: keep only alphabetic tokens
-    - Lemmatization: reduce words to base form
-    
-    Example:
-        "The politicians are running for office"
-        -> ["politician", "run", "office"]
-    
-    Args:
-        text_series: pandas Series or list of text documents
-        batch_size: Number of texts to process simultaneously
-        
-    Returns:
-        List of lists containing cleaned tokens
+    Preprocess text using spaCy with multiprocessing.
     """
     cleaned_texts = []
-    
-    # Process texts in batches using spaCy's pipeline with multiprocessing
-    # n_process uses multiple CPU cores for parallel processing
+
     for doc in tqdm(
-        nlp.pipe(text_series, batch_size=batch_size, n_process=n_processes),
+        nlp.pipe(
+            text_series,
+            batch_size=batch_size,
+            n_process=n_process
+        ),
         total=len(text_series),
-        desc="Tokenizing text"
+        desc="Tokenizing text",
+        file=sys.stdout        
     ):
-        # Extract tokens that meet criteria
         tokens = []
+
         for token in doc:
-            # Skip non-alphabetic tokens (numbers, punctuation)
+            # Keep alphabetic tokens only
             if not token.is_alpha:
                 continue
-            
-            # Skip stopwords if enabled in config
+
             if REMOVE_STOPWORDS and token.is_stop:
                 continue
-            
-            # Get lemmatized form (base form of word)
+
             word = token.lemma_
-            
-            # Lowercase if enabled in config
             if LOWERCASE:
                 word = word.lower()
-            
+
             tokens.append(word)
-        
+
         cleaned_texts.append(tokens)
-    
+
     return cleaned_texts
 
 
