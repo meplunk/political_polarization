@@ -36,6 +36,12 @@ squeue -u your-computing-id
 ```
 The "ST" (status) column will tell you your progress; PD = pending, CF = configuring, R = running, blank = done.
 
+You can also watch the progress by looking at the .out file; input:
+```bash
+tail -f logs/tokenize_746XXXXX.out
+```
+(replace with your actual job number). 
+
 
 
 
