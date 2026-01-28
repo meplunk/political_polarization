@@ -89,7 +89,7 @@ def load_tokenized_data():
     if not agg_path.exists():
         agg_helper.main()
 
-    speeches_df = load_pickle(agg_path)
+    speeches_df = pd.read_csv(agg_path)
     print(f"Loaded {len(speeches_df):,} speakers with speech tokens and metadata")
 
     ads_token_col = "tokenized_ad"
