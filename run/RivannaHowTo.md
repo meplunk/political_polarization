@@ -24,9 +24,10 @@ and follow the instructions from there.
 Each file has an associated .slurm file in the /run folder that will run it. To do so from the HPC Shell, input the following:
 ```bash
 module purge
+module load gcc/11.4.0  openmpi/4.1.4
 module load python/3.11.4
 cd /scratch/your-computing-id/political_polarization
-source /venv/bin/activate
+source venv/bin/activate
 sbatch run/file-name.slurm
 ```
 
