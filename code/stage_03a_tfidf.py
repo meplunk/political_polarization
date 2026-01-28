@@ -52,6 +52,10 @@ from sklearn.metrics import mean_squared_error, r2_score, make_scorer
 from config import (TFIDF_MODEL, load_pickle, save_pickle, TOKENIZED_ADS, 
                     AGG_TOKENIZED_SPEECHES, TFIDF_CV_RESULTS, TFIDF_VECTORIZER)
 import helper_aggregate_by_speaker as agg_helper
+import sys
+from pathlib import Path
+from tqdm import tqdm
+import os
 
 def identity(x):
     return x
@@ -181,13 +185,15 @@ def evaluate_ridge_for_alpha(X, target, base_params, alpha, vocab_size, cv=5):
             "neg_mse": "neg_mean_squared_error",
         }
 
+        N_JOBS = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
+
         cv_results = cross_validate(
             ridge,
             X,
             target,
             cv=cv,
             scoring=scoring,
-            n_jobs=-1,      # use all CPUs
+            n_jobs=N_JOBS,
             return_estimator=False,
         )
 
@@ -254,7 +260,16 @@ def run_cross_validation():
     min_vocab = 50  # same threshold you used before
 
     combo_counter = 0
-    for tfidf_idx, params in enumerate(tfidf_param_combinations, 1):
+    for tfidf_idx, params in enumerate(
+        tqdm(
+            tfidf_param_combinations,
+            total=total_tfidf_combos,
+            desc="TF-IDF configs",
+            file=sys.stdout,
+            leave=True,
+        ),
+        1,
+    ):
         combo_counter += 1
 
         print(f"\n[TFIDF {tfidf_idx}/{total_tfidf_combos}]")
@@ -288,7 +303,12 @@ def run_cross_validation():
                   f"matrix={X.shape[0]:,}×{X.shape[1]:,}, time={tfidf_time:.2f}s")
 
             # --- Step 2: loop over alphas using the same X ---
-            for alpha in ridge_alpha_values:
+            for alpha in tqdm(
+                ridge_alpha_values,
+                desc="Ridge alphas",
+                file=sys.stdout,
+                leave=False,
+            ):
                 print(f"    [alpha={alpha}]")
                 result = evaluate_ridge_for_alpha(
                     X,
